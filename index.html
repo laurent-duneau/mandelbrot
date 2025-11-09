@@ -20,6 +20,12 @@
             align-items: center;
         }
     </style>
+    <script>
+        // Prevent context menu on right-click
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+    </script>
 </head>
 <body>
     <div id="game-container"></div>

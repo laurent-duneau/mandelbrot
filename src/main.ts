@@ -14,6 +14,7 @@ class GameScene extends Phaser.Scene {
     private currentSquareY: number = 0;
     private currentViewBounds: ViewBounds;
     private panelSize: number = 0;
+    private zoomHistory: ViewBounds[] = []; // Stack to track zoom history
 
     constructor() {
         super({ key: 'GameScene' });
@@ -115,12 +116,14 @@ class GameScene extends Phaser.Scene {
         this.selectionSquare = this.add.graphics();
         this.selectionSquare.setDepth(1000); // Draw on top of everything
         
-        // Left mouse button down - set upper left corner
+        // Mouse button down - handle left (selection) and right (zoom out)
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
             if (pointer.leftButtonDown()) {
                 this.isDrawing = true;
                 this.startX = pointer.x;
                 this.startY = pointer.y;
+            } else if (pointer.rightButtonDown()) {
+                this.zoomOut();
             }
         });
 
@@ -241,6 +244,9 @@ class GameScene extends Phaser.Scene {
             imagMax: centerImag + newImagRange / 2
         };
         
+        // Save current view to history before zooming in
+        this.zoomHistory.push({ ...this.currentViewBounds });
+        
         // Update current view bounds
         this.currentViewBounds = newBounds;
         
@@ -264,6 +270,41 @@ class GameScene extends Phaser.Scene {
         ).setOrigin(0.5);
         
         // Re-render with new bounds
+        this.time.delayedCall(100, () => {
+            this.renderMandelbrotSet(width, height);
+        });
+    }
+
+    private zoomOut(): void {
+        // Check if there's a previous view in history
+        if (this.zoomHistory.length === 0) {
+            return; // Already at the initial view, nothing to zoom out to
+        }
+
+        // Restore the previous view from history
+        const previousBounds = this.zoomHistory.pop()!;
+        this.currentViewBounds = previousBounds;
+
+        // Clear any selection square
+        if (this.selectionSquare) {
+            this.selectionSquare.clear();
+        }
+
+        // Show loading text
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+        this.loadingText = this.add.text(
+            width / 2,
+            height / 2,
+            'Rendering...',
+            {
+                fontSize: '24px',
+                color: '#ffffff',
+                align: 'center'
+            }
+        ).setOrigin(0.5);
+
+        // Re-render with previous bounds
         this.time.delayedCall(100, () => {
             this.renderMandelbrotSet(width, height);
         });

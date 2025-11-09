@@ -62,13 +62,21 @@ mandelbrot/
 - The square must be drawn as a perfect square (equal width and height)
 - Visual feedback must be provided during drawing (outline visible)
 
-**FR-4: Zoom Functionality**
+**FR-4: Zoom In Functionality**
 - When the selection square is completed (left mouse button released):
   - The application must zoom into the region defined by the square
   - The center of the square becomes the new viewport center
   - The Mandelbrot set must be re-rendered at a new scale
   - The new scale must be calculated such that the content of the square fits the entire main panel
   - Aspect ratio must be maintained during zoom operations
+  - The previous view (center and scale) must be saved to zoom history
+
+**FR-5: Zoom Out Functionality**
+- Right mouse click must perform zoom-out operation
+- Zoom-out must restore the view (center and scale) as it was before the last zoom-in
+- The application must maintain a history of previous views
+- When zooming out, the Mandelbrot set must be re-rendered with the previous view bounds
+- If already at the initial view (no zoom history), zoom-out has no effect
 
 ---
 
@@ -101,9 +109,12 @@ mandelbrot/
 - **Constraints**: Always maintains square shape
 
 ### 6.3 Interaction Model
-1. User clicks and holds left mouse button → Selection starts
-2. User drags mouse → Square size updates in real-time
-3. User releases left mouse button → Zoom operation triggers
+1. **Zoom In**:
+   - User clicks and holds left mouse button → Selection starts
+   - User drags mouse → Square size updates in real-time
+   - User releases left mouse button → Zoom in operation triggers, previous view saved to history
+2. **Zoom Out**:
+   - User right-clicks → Zoom out operation triggers, restores previous view from history
 
 ---
 
