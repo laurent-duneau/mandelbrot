@@ -13,7 +13,6 @@ class GameScene extends Phaser.Scene {
     private currentSquareX: number = 0;
     private currentSquareY: number = 0;
     private currentViewBounds: ViewBounds;
-    private panelSize: number = 0;
     private zoomHistory: ViewBounds[] = []; // Stack to track zoom history
 
     constructor() {
@@ -28,18 +27,12 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Calculate the largest square that fits in the window
-        const windowWidth = window.innerWidth;
-        const windowHeight = window.innerHeight;
-        this.panelSize = Math.min(windowWidth, windowHeight);
+        // Get the actual camera dimensions (should be square and maximally sized)
+        // The game is initialized with square dimensions that fit the window
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
         
-        // Resize the game to be square
-        this.scale.resize(this.panelSize, this.panelSize);
-        
-        const width = this.panelSize;
-        const height = this.panelSize;
-
-        // Show loading text
+        // Show loading text centered in the square
         this.loadingText = this.add.text(
             width / 2,
             height / 2,
@@ -55,17 +48,58 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(100, () => {
             this.renderMandelbrotSet(width, height);
         });
+        
+        // Listen for resize events to re-render when window is resized
+        this.scale.on('resize', this.handleResize, this);
+    }
+    
+    private handleResize(_gameSize: Phaser.Structs.Size): void {
+        // Get the new camera dimensions after resize
+        // The game should maintain square aspect ratio (width == height)
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+        
+        // Clear selection square if visible
+        if (this.selectionSquare) {
+            this.selectionSquare.clear();
+        }
+        
+        // Show loading text
+        if (this.loadingText) {
+            this.loadingText.destroy();
+        }
+        this.loadingText = this.add.text(
+            width / 2,
+            height / 2,
+            'Rendering...',
+            {
+                fontSize: '24px',
+                color: '#ffffff',
+                align: 'center'
+            }
+        ).setOrigin(0.5);
+        
+        // Re-render with current view bounds but new size
+        // Use a small delay to ensure the resize is complete
+        this.time.delayedCall(100, () => {
+            this.renderMandelbrotSet(width, height);
+        });
     }
 
     private renderMandelbrotSet(width: number, height: number): void {
-        // Create renderer with screen dimensions and current view bounds
-        // Using full screen resolution for best quality
-        const renderWidth = width;
-        const renderHeight = height;
+        // Use the provided dimensions to render the Mandelbrot set
+        // These should be square dimensions that maximize the available window space
+        const renderWidth = Math.floor(width);
+        const renderHeight = Math.floor(height);
         
+        // Ensure we're rendering a square (take the minimum to maintain square aspect)
+        const squareSize = Math.min(renderWidth, renderHeight);
+        
+        // Create renderer with square dimensions and current view bounds
+        // The renderer will maintain aspect ratio and center the Mandelbrot set within the bounds
         this.mandelbrotRenderer = new MandelbrotRenderer(
-            renderWidth, 
-            renderHeight, 
+            squareSize, 
+            squareSize, 
             100, 
             this.currentViewBounds
         );
@@ -95,15 +129,21 @@ class GameScene extends Phaser.Scene {
             this.loadingText = null;
         }
         
-        // Display the Mandelbrot set in the center
-        // Since panel is square and we render square, no scaling needed
+        // Display the Mandelbrot set centered in the square panel
+        // The image is positioned at the center of the camera/viewport
+        // Since the texture is square and the viewport should be square, it will be perfectly centered
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
         this.mandelbrotImage = this.add.image(
-            width / 2,
-            height / 2,
+            centerX,
+            centerY,
             textureKey
         );
         
-        this.mandelbrotImage.setOrigin(0.5);
+        // Set origin to center (0.5, 0.5) so the image is properly centered
+        // This ensures the Mandelbrot set is centered regardless of texture size
+        this.mandelbrotImage.setOrigin(0.5, 0.5);
         
         // Set up mouse input for square drawing (only on first render)
         if (!this.selectionSquare) {
@@ -194,10 +234,10 @@ class GameScene extends Phaser.Scene {
         // Get current view bounds
         const currentBounds = this.currentViewBounds;
         
-        // Get the actual texture dimensions
-        const texture = this.textures.get('mandelbrot');
-        const textureWidth = texture.width;
-        const textureHeight = texture.height;
+        // Get the actual texture dimensions from the image's frame
+        // Since the image uses the texture at 1:1 scale, we can use the frame dimensions
+        const textureWidth = this.mandelbrotImage.width;
+        const textureHeight = this.mandelbrotImage.height;
         
         // The image is displayed at its natural size (1:1 scale) since panel is square
         const imageX = this.mandelbrotImage.x;
@@ -207,34 +247,62 @@ class GameScene extends Phaser.Scene {
         const imageLeft = imageX - textureWidth / 2;
         const imageTop = imageY - textureHeight / 2;
         
-        // Convert screen coordinates to texture coordinates
-        const squareLeftInImage = this.currentSquareX - imageLeft;
-        const squareTopInImage = this.currentSquareY - imageTop;
+        // Convert screen coordinates to texture pixel coordinates
+        const squareLeftInTexture = this.currentSquareX - imageLeft;
+        const squareTopInTexture = this.currentSquareY - imageTop;
         
-        // Normalize to 0-1 range within the texture
-        const normX = squareLeftInImage / textureWidth;
-        const normY = squareTopInImage / textureHeight;
+        // Normalize to 0-1 range within the texture (pixel coordinates)
+        const normX = squareLeftInTexture / textureWidth;
+        const normY = squareTopInTexture / textureHeight;
         
         // Calculate the normalized size of the square
         const normSize = this.currentSquareSize / textureWidth;
         
-        // Calculate the center of the square in normalized coordinates
+        // Calculate the center of the square in normalized coordinates (0-1)
         const centerNormX = normX + normSize / 2;
         const centerNormY = normY + normSize / 2;
         
-        // Convert normalized coordinates to complex plane coordinates
+        // Calculate adjusted bounds (same logic as in MandelbrotRenderer)
+        // This accounts for aspect ratio adjustments made during rendering
         const realRange = currentBounds.realMax - currentBounds.realMin;
         const imagRange = currentBounds.imagMax - currentBounds.imagMin;
+        const canvasAspect = textureWidth / textureHeight;
+        const setAspect = realRange / imagRange;
         
-        const centerReal = currentBounds.realMin + centerNormX * realRange;
-        const centerImag = currentBounds.imagMin + centerNormY * imagRange;
+        let adjustedRealMin = currentBounds.realMin;
+        let adjustedRealMax = currentBounds.realMax;
+        let adjustedImagMin = currentBounds.imagMin;
+        let adjustedImagMax = currentBounds.imagMax;
+        
+        if (canvasAspect > setAspect) {
+            // Canvas is wider, adjust real axis
+            const centerReal = (currentBounds.realMin + currentBounds.realMax) / 2;
+            const adjustedRealRange = imagRange * canvasAspect;
+            adjustedRealMin = centerReal - adjustedRealRange / 2;
+            adjustedRealMax = centerReal + adjustedRealRange / 2;
+        } else {
+            // Canvas is taller, adjust imaginary axis
+            const centerImag = (currentBounds.imagMin + currentBounds.imagMax) / 2;
+            const adjustedImagRange = realRange / canvasAspect;
+            adjustedImagMin = centerImag - adjustedImagRange / 2;
+            adjustedImagMax = centerImag + adjustedImagRange / 2;
+        }
+        
+        // Convert normalized texture coordinates to complex plane coordinates
+        // using the ADJUSTED bounds (same as renderer uses)
+        const adjustedRealRange = adjustedRealMax - adjustedRealMin;
+        const adjustedImagRange = adjustedImagMax - adjustedImagMin;
+        
+        const centerReal = adjustedRealMin + centerNormX * adjustedRealRange;
+        const centerImag = adjustedImagMin + centerNormY * adjustedImagRange;
         
         // Calculate new bounds: the square content should fit the entire panel
         // The square represents a portion of the current view, so we need to zoom in
         const zoomFactor = 1 / normSize; // How much we need to zoom
         
-        const newRealRange = realRange / zoomFactor;
-        const newImagRange = imagRange / zoomFactor;
+        // Calculate new ranges based on the square size
+        const newRealRange = adjustedRealRange / zoomFactor;
+        const newImagRange = adjustedImagRange / zoomFactor;
         
         // Create new bounds centered on the square center
         const newBounds: ViewBounds = {
@@ -316,31 +384,48 @@ const getSquareSize = (): number => {
     return Math.min(window.innerWidth, window.innerHeight);
 };
 
-const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.AUTO,
-    width: getSquareSize(),
-    height: getSquareSize(),
-    parent: 'game-container',
-    backgroundColor: '#2d2d2d',
-    scene: GameScene,
-    physics: {
-        default: 'arcade',
-        arcade: {
-            gravity: { y: 0 },
-            debug: false
+// Initialize the game after DOM is ready to ensure accurate window dimensions
+const initGame = () => {
+    // Calculate initial square size based on current window dimensions
+    // This ensures the Mandelbrot set is displayed in the largest possible square
+    const initialSize = getSquareSize();
+    
+    const config: Phaser.Types.Core.GameConfig = {
+        type: Phaser.AUTO,
+        width: initialSize,
+        height: initialSize,
+        parent: 'game-container',
+        backgroundColor: '#2d2d2d',
+        scene: GameScene,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { x: 0, y: 0 },
+                debug: false
+            }
+        },
+        scale: {
+            mode: Phaser.Scale.RESIZE,
+            autoCenter: Phaser.Scale.CENTER_BOTH
         }
-    },
-    scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-    }
+    };
+    
+    const game = new Phaser.Game(config);
+    
+    // Handle window resize to maintain square aspect ratio
+    // The scene will handle the resize event and re-render accordingly
+    window.addEventListener('resize', () => {
+        const newSize = getSquareSize();
+        game.scale.resize(newSize, newSize);
+        // Note: The scene's handleResize method will be called automatically
+        // by Phaser's scale manager when the resize event is triggered
+    });
 };
 
-const game = new Phaser.Game(config);
-
-// Handle window resize to maintain square aspect ratio
-window.addEventListener('resize', () => {
-    const newSize = getSquareSize();
-    game.scale.resize(newSize, newSize);
-});
+// Initialize when DOM is ready to ensure window dimensions are accurate
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initGame);
+} else {
+    initGame();
+}
 

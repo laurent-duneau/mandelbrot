@@ -8,6 +8,12 @@ The Mandelbrot project is an interactive visualization application that displays
 ### 1.2 Purpose
 This application provides an interactive way to explore the Mandelbrot set fractal with real-time rendering and zoom capabilities.
 
+### 1.3 Documentation
+- **Specification** (this document): Describes **what** the system should do (functional requirements, behavior, user interface)
+- **Guidelines** ([guidelines.md](./guidelines.md)): Describes **how** things are implemented (algorithms, coordinate transformations, design decisions)
+
+For detailed implementation explanations, particularly regarding the zoom functionality, see the [guidelines.md](./guidelines.md) document.
+
 ---
 
 ## 2. Technology Stack
@@ -47,11 +53,14 @@ mandelbrot/
 - The visualization must maintain aspect ratio (no deformation)
 - Initial scale must display the complete Mandelbrot set within the viewport
 - The same scale must be applied on both X and Y axes
+- The Mandelbrot set image must be centered within the square panel
 
 **FR-2: Main Panel Layout**
-- The main panel must be resizable
-- The main panel must be the largest square that fits within the window
+- The main panel must be resizable and respond to window resize events
+- The main panel must be the largest square that fits within the window (maximal size)
+- The square size is calculated as `min(window.innerWidth, window.innerHeight)`
 - The Mandelbrot set must be centered within the main panel
+- When the window is resized, the square must recalculate its size and re-render the Mandelbrot set
 
 ### 4.2 Interactive Selection
 
@@ -130,6 +139,7 @@ mandelbrot/
 - Complex plane mapping to screen coordinates
 - Aspect ratio preservation during transformations
 - Zoom calculations based on selection square bounds
+- **For detailed implementation**: See [guidelines.md](./guidelines.md) section on "Zoom In Functionality" and "Coordinate System Transformations"
 
 ---
 
